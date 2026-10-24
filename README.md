@@ -46,3 +46,4 @@ See `IMPLEMENTATION_PLAN.md`. Before submission, upload APK/source/admin URL/wor
 
 ## Seed demo catalog (admin only)
 Do not seed products from the customer app: Firestore rules correctly reserve catalog writes for admins. Instead, from project root install `firebase-admin`, set `GOOGLE_APPLICATION_CREDENTIALS` to a downloaded Firebase service-account JSON path (keep it outside the repo), and run `node scripts/seed-products.mjs`. This creates 54 demo records. The current image URLs are placeholders, not final realistic product photos; replace them with matching images before submission.
+# Califncoc
