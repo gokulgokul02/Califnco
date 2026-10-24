@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+.dart_tool/
+.packages
+build/
+node_modules/
+dist/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+service-account*.json
+firebase-adminsdk*.json

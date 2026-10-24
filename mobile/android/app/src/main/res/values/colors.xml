@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Califnco primary teal — used as FCM notification accent color -->
+    <color name="notification_color">#087F8C</color>
+</resources>

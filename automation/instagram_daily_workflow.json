@@ -1,0 +1,489 @@
+{
+  "name": "Califnco Daily Instagram — Full AI Auto Post Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 10,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "daily_trigger_10am",
+      "name": "Daily 10 AM IST Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1KIO7ipvJ9FmWHGZ_KnIUbJ9yAtquqFSugFOEkqezbac",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Products",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "read_products_sheets",
+      "name": "Read Product from Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        180
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "UyU4JHkbGgGCroxZ",
+          "name": "Google Service Account account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pick exactly ONE product per day so downstream nodes run only once per day\nconst allItems = $input.all();\nif (!allItems || allItems.length === 0) {\n  throw new Error('No products found in Google Sheet \"Products\"! Please add rows first.');\n}\n\n// Rotate through products based on day of year (1-365)\nconst today = new Date();\nconst start = new Date(today.getFullYear(), 0, 0);\nconst dayOfYear = Math.floor((today - start) / 86400000);\nconst index = dayOfYear % allItems.length;\n\nconst row = allItems[index].json;\n\n// Safe field extraction supporting multiple column naming conventions\nconst productName = row['Product Name'] || row['name'] || row['Name'] || row['product_name'] || 'Califnco AquaPure RO Purifier';\nconst productDescription = row['Description'] || row['description'] || row['desc'] || 'Advanced multi-stage RO water purification system with mineral booster';\nconst productPrice = String(row['Price'] || row['price'] || row['MRP'] || '14999');\nconst category = row['Category'] || row['category'] || 'RO Purifier';\n\nreturn [{\n  json: {\n    productName,\n    productDescription,\n    productPrice,\n    category,\n    dayIndex: index,\n    totalProducts: allItems.length\n  }\n}];"
+      },
+      "id": "select_today_product",
+      "name": "Select Product for Today",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $vars.GEMINI_API_KEY }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  contents: [\n    {\n      parts: [\n        {\n          text: \"You are an elite luxury social media brand manager for Califnco Water Purifiers in Chennai.\\n\\nWrite an exceptionally neat, premium, aesthetic, and high-converting Instagram caption for this product:\\nProduct: \" + $json.productName + \"\\nCategory: \" + $json.category + \"\\nSpecial Offer Price: ₹\" + $json.productPrice + \"\\nKey Features: \" + $json.productDescription + \"\\n\\nFormatting Structure (keep it super neat with clean spacing, line breaks, and aesthetic emojis):\\n1. [Hook] Catchy, luxurious opening line that sparks curiosity and desire for 100% pure drinking water.\\n2. [Purity & Health Benefits] 3 crisp bullet points with emojis highlighting health, alkaline mineral balance, copper charge, and pure sweet taste.\\n3. [Special Offer Section]\\n   🏷️ Special Offer: ₹\" + $json.productPrice + \"\\n   🎁 FREE Perks: 100% Free Doorstep Delivery, Installation & Water TDS Health Test in Chennai!\\n4. [Call to Action] Strong CTA (DM us 'PURE' or tap link in bio / Call for instant doorstep booking).\\n5. [Tags Block] 25-30 curated hashtags organized neatly into brand, product, category, Chennai local, and trending promotion tags:\\n   #Califnco #CalifncoWater #CalifncoIndia #CalifncoChennai #CalifncoPure #CalifncoPurifier #\" + $json.productName.replace(/[^a-zA-Z0-9]/g, '') + \" #ROPurifier #WaterPurifier #AlkalineWater #PureWater #TDSController #CleanWater #Chennai #ChennaiHomes #ChennaiLiving #ChennaiCity #TamilNadu #HealthyLiving #KitchenEssentials #HomeAppliancesIndia #SafeWater #PureLife #WaterFilterIndia #TrendingNow #DailyDealsIndia\\n\\nReturn ONLY the final caption text ready to publish.\"\n        }\n      ]\n    }\n  ],\n  generationConfig: {\n    temperature: 0.7,\n    maxOutputTokens: 900\n  }\n}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "gemini_caption_node",
+      "name": "Generate AI Caption (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate Ultra-Premium Commercial Offer Banner using Hugging Face FLUX Space + Upload to ImgBB\nconst product = $('Select Product for Today').first().json;\nconst hfToken = $vars.HF_API_TOKEN;\nconst imgbbKey = $vars.IMGBB_API_KEY;\n\nconst name = product.productName || 'Califnco Smart RO Water Purifier';\nconst price = product.productPrice || '14999';\nconst category = (product.category || 'RO Purifier').toLowerCase();\n\nlet productVisual = 'luxury Apple-style wall-mounted Califnco smart RO water purifier with sleek digital touch display, glowing neon blue LED indicator, brushed aluminum accents, transparent pure mineral water chamber';\nif (category.includes('filter') || category.includes('membrane') || category.includes('carbon') || category.includes('sediment')) {\n  productVisual = 'high-performance genuine Califnco multi-layer RO filter cartridge with glowing crystal blue water flow inside a transparent core';\n} else if (category.includes('pump') || category.includes('booster')) {\n  productVisual = 'heavy-duty commercial Califnco RO booster pump with precision copper motor and pressurized pure water stream';\n} else if (category.includes('dispenser')) {\n  productVisual = 'ultra-premium matte black and brushed stainless steel Califnco hot and cold water dispenser with a crystal clear glass filling with pure water';\n} else if (category.includes('spare') || category.includes('part')) {\n  productVisual = 'precision-engineered Califnco genuine spare parts with digital TDS tester in high-tech presentation';\n}\n\nconst promptText = `Ultra-luxury commercial product advertisement poster for \"${name}\", featuring ${productVisual} front and center on a polished white Italian marble countertop in a modern Chennai designer luxury penthouse kitchen. Elegant glowing typography badge: \"CALIFNCO SPECIAL OFFER ₹${price}\", \"FREE INSTALLATION & TDS TEST\", frozen high-speed crystal-clear splashing pure water droplets curling around the product, dramatic cinematic studio lighting with soft cyan backlighting, subtle gold highlights, 3D luxury commercial graphic design, 8k resolution, hyperrealistic, award-winning social media ad banner`;\n\n// 1. Fetch Hugging Face Space JWT\nconst jwt = await this.helpers.httpRequest({\n  method: 'GET',\n  url: 'https://huggingface.co/api/spaces/black-forest-labs/FLUX.1-schnell/jwt',\n  headers: { 'Authorization': 'Bearer ' + hfToken }\n});\nconst cleanJwt = String(jwt).replace(/\"/g, '').trim();\n\n// 2. Queue inference on FLUX Space\nconst sessionHash = Math.random().toString(36).substring(2);\nawait this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://black-forest-labs-flux-1-schnell.hf.space/gradio_api/queue/join',\n  headers: {\n    'Authorization': 'Bearer ' + hfToken,\n    'Content-Type': 'application/json'\n  },\n  body: {\n    data: [promptText, 0, true, 1024, 1024, 4],\n    event_data: null,\n    fn_index: 2,\n    trigger_id: null,\n    session_hash: sessionHash\n  },\n  json: true\n});\n\n// 3. Listen to SSE for generated image\nconst text = await this.helpers.httpRequest({\n  method: 'GET',\n  url: 'https://black-forest-labs-flux-1-schnell.hf.space/gradio_api/queue/data',\n  qs: { session_hash: sessionHash, __sign: cleanJwt },\n  headers: {\n    'Authorization': 'Bearer ' + hfToken,\n    'Accept': 'text/event-stream'\n  }\n});\n\nconst match = String(text).match(/https:\\/\\/[^\\s\"']+\\/image\\.webp[^\\s\"']*/);\nif (!match) {\n  throw new Error('Hugging Face FLUX generation failed: ' + String(text).slice(-200));\n}\n\nconst hfImageUrl = match[0];\n\n// 4. Download generated image buffer\nconst imgBuf = await this.helpers.httpRequest({\n  method: 'GET',\n  url: hfImageUrl,\n  encoding: 'arraybuffer'\n});\n\nconst base64 = Buffer.from(imgBuf).toString('base64');\nconst postData = 'key=' + encodeURIComponent(imgbbKey) + '&image=' + encodeURIComponent(base64) + '&name=califnco_flux_' + Date.now();\n\n// 5. Upload to ImgBB for direct Instagram CDN URL\nconst imgbbRes = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://api.imgbb.com/1/upload',\n  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },\n  body: postData,\n  json: true\n});\n\nconst publicUrl = imgbbRes.data.url;\n\nreturn [{\n  json: {\n    ...product,\n    imageUrl: publicUrl\n  }\n}];"
+      },
+      "id": "generate_hf_flux_banner",
+      "name": "Generate AI Banner (Hugging Face FLUX)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "final_caption",
+              "name": "caption",
+              "value": "={{ $('Generate AI Caption (Gemini)').first().json.candidates[0].content.parts[0].text }}",
+              "type": "string"
+            },
+            {
+              "id": "final_image_url",
+              "name": "imageUrl",
+              "value": "={{ $json.imageUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "product_name_val",
+              "name": "productName",
+              "value": "={{ $json.productName }}",
+              "type": "string"
+            },
+            {
+              "id": "product_price_val",
+              "name": "productPrice",
+              "value": "={{ $json.productPrice }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "merge_caption_image",
+      "name": "Merge Caption + Banner URL",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1200,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.instagram.com/v21.0/{{ $vars.IG_USER_ID || '29001521526131087' }}/media",
+        "sendBody": true,
+        "bodyContentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "image_url",
+              "value": "={{ $json.imageUrl }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $json.caption }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $vars.META_ACCESS_TOKEN || 'IGAAXLEIQMJilBZAGJPYnQ0b1RIcmxHUVF1VTE2cG4tdng2NHNPTElYMXpSVW1mWUVaVlp6aGx2eko1eU1nMWdCUGlwMkpHRmp6VmRQZAEtoZAU1ydF9GNEdBdEpiTlVUTENlcUczY2RIVkhIYUNGUGl3TWNNOWNreE5rcGZAxWlE1NAZDZD' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ig_create_container",
+      "name": "Instagram: Create Media Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "save_container_id",
+              "name": "containerId",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "pass_caption",
+              "name": "caption",
+              "value": "={{ $('Merge Caption + Banner URL').first().json.caption }}",
+              "type": "string"
+            },
+            {
+              "id": "pass_image",
+              "name": "imageUrl",
+              "value": "={{ $('Merge Caption + Banner URL').first().json.imageUrl }}",
+              "type": "string"
+            },
+            {
+              "id": "pass_name",
+              "name": "productName",
+              "value": "={{ $('Merge Caption + Banner URL').first().json.productName }}",
+              "type": "string"
+            },
+            {
+              "id": "pass_price",
+              "name": "productPrice",
+              "value": "={{ $('Merge Caption + Banner URL').first().json.productPrice }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "save_container_node",
+      "name": "Save Container ID",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "wait_ig_processing",
+      "name": "Wait 5s (Instagram processing)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1920,
+        180
+      ],
+      "webhookId": "califnco-ig-wait"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.instagram.com/v21.0/{{ $vars.IG_USER_ID || '29001521526131087' }}/media_publish",
+        "sendBody": true,
+        "bodyContentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "creation_id",
+              "value": "={{ $json.containerId }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $vars.META_ACCESS_TOKEN || 'IGAAXLEIQMJilBZAGJPYnQ0b1RIcmxHUVF1VTE2cG4tdng2NHNPTElYMXpSVW1mWUVaVlp6aGx2eko1eU1nMWdCUGlwMkpHRmp6VmRQZAEtoZAU1ydF9GNEdBdEpiTlVUTENlcUczY2RIVkhIYUNGUGl3TWNNOWNreE5rcGZAxWlE1NAZDZD' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ig_publish_node",
+      "name": "Instagram: Publish Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1KIO7ipvJ9FmWHGZ_KnIUbJ9yAtquqFSugFOEkqezbac",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PublishLog",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $now.format('YYYY-MM-DD') }}",
+            "Time": "={{ $now.format('HH:mm:ss') }}",
+            "Product": "={{ $('Save Container ID').first().json.productName }}",
+            "Price": "={{ $('Save Container ID').first().json.productPrice }}",
+            "InstagramPostId": "={{ $json.id }}",
+            "ImageUrl": "={{ $('Save Container ID').first().json.imageUrl }}",
+            "Caption": "={{ $('Save Container ID').first().json.caption.substring(0, 200) }}",
+            "Status": "success",
+            "PostedAt": "={{ $now.format('YYYY-MM-DD HH:mm:ss') }}",
+            "postedat": "={{ $now.format('YYYY-MM-DD HH:mm:ss') }}",
+            "Posted At": "={{ $now.format('YYYY-MM-DD HH:mm:ss') }}",
+            "PublishedAt": "={{ $now.format('YYYY-MM-DD HH:mm:ss') }}",
+            "Published At": "={{ $now.format('YYYY-MM-DD HH:mm:ss') }}"
+          }
+        },
+        "options": {
+          "continueOnFail": true
+        }
+      },
+      "id": "log_sheets_success",
+      "name": "Log Success to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2400,
+        180
+      ],
+      "credentials": {
+        "googleApi": {
+          "id": "UyU4JHkbGgGCroxZ",
+          "name": "Google Service Account account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "content": "## 🎯 Califnco Instagram Daily Post Workflow\n\n**Hugging Face FLUX AI Pipeline:**\n1. ⏰ **Daily 10 AM IST Trigger**\n2. 📄 **Read Product from Google Sheets** (Sheet: `Products`)\n3. 🎯 **Select Product for Today** (Picks 1 product/day)\n4. 🤖 **Generate AI Caption (Gemini 3.5 Flash)** (Super fast ~2s)\n5. 🎨 **Generate AI Banner (Hugging Face FLUX)** (Native `this.helpers.httpRequest` — generates banner & uploads to ImgBB)\n6. 🔗 **Merge Caption + Banner URL**\n7. 📦 **Instagram: Create Media Container** (`graph.instagram.com`)\n8. 💾 **Save Container ID**\n9. ⏳ **Wait 5s**\n10. 🚀 **Instagram: Publish Post**\n11. 📝 **Log Success to Google Sheets** (`PublishLog`)",
+        "height": 340,
+        "width": 560,
+        "color": 4
+      },
+      "id": "workflow_info_note",
+      "name": "Workflow Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        380
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily 10 AM IST Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Product from Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Product from Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Select Product for Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Product for Today": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Caption (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Caption (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Banner (Hugging Face FLUX)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Banner (Hugging Face FLUX)": {
+      "main": [
+        [
+          {
+            "node": "Merge Caption + Banner URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Caption + Banner URL": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Create Media Container",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Create Media Container": {
+      "main": [
+        [
+          {
+            "node": "Save Container ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Container ID": {
+      "main": [
+        [
+          {
+            "node": "Wait 5s (Instagram processing)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5s (Instagram processing)": {
+      "main": [
+        [
+          {
+            "node": "Instagram: Publish Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: Publish Post": {
+      "main": [
+        [
+          {
+            "node": "Log Success to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "califnco-v13-n8n-native-hf",
+  "meta": {
+    "instanceId": "f40d3296e2576e9e541bde3d40e2bf131627f6d8f72f8abb937aee55698faba3"
+  },
+  "tags": [
+    "califnco",
+    "instagram",
+    "gemini",
+    "huggingface",
+    "flux",
+    "automation"
+  ]
+}

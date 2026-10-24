@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(uid())).data.role;
+    }
+
+    function isAdmin() {
+      return signedIn() && getUserRole() == 'admin';
+    }
+
+    function isApprovedDealer() {
+      return signedIn()
+        && getUserRole() == 'dealer'
+        && get(/databases/$(database)/documents/dealers/$(uid())).data.status == 'approved';
+    }
+
+    // ---- Products ----
+    // Any signed-in user can read active products
+    // Only admin can write
+    match /products/{productId} {
+      allow read: if resource.data.active == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ---- Categories ----
+    // Any user can read active categories
+    // Only admin can write
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---- User Profiles ----
+    // Users can read/update their own profile; admin can read/write all
+    // On create, role must be 'customer' or 'dealer' (prevents self-promotion to admin)
+    match /users/{userId} {
+      allow read:   if signedIn() && (uid() == userId || isAdmin());
+      allow create: if signedIn() && uid() == userId
+                    && request.resource.data.role in ['customer', 'dealer'];
+      allow update: if isAdmin()
+                    || (signedIn() && uid() == userId
+                        && request.resource.data.role == resource.data.role
+                        && !request.resource.data.keys().hasAny(['role']));
+      allow delete: if isAdmin();
+    }
+
+    // ---- Dealer Applications ----
+    // Dealers can submit and view their own application
+    // Only admin can approve/reject
+    match /dealers/{dealerId} {
+      allow read:   if isAdmin() || (signedIn() && uid() == dealerId);
+      allow create: if signedIn() && uid() == dealerId
+                    && request.resource.data.status == 'pending';
+      allow update: if isAdmin()
+                    || (signedIn() && uid() == dealerId
+                        && request.resource.data.status == resource.data.status);
+      allow delete: if isAdmin();
+    }
+
+    // ---- Orders ----
+    // Customers and approved dealers can create their own orders
+    // They can only read their own orders; admin sees all
+    match /orders/{orderId} {
+      allow read: if isAdmin()
+                  || (signedIn()
+                      && (resource.data.customerId == uid()
+                          || resource.data.dealerId == uid()));
+      allow create: if signedIn()
+                    && (request.resource.data.customerId == uid()
+                        || (isApprovedDealer() && request.resource.data.dealerId == uid()));
+      allow update, delete: if isAdmin();
+    }
+
+    // ---- Service Requests ----
+    // Customers can submit and view their own service requests
+    // Admin can update/delete all
+    match /serviceRequests/{serviceId} {
+      allow create: if signedIn() && request.resource.data.customerId == uid();
+      allow read:   if isAdmin() || (signedIn() && resource.data.customerId == uid());
+      allow update, delete: if isAdmin();
+    }
+
+    // ---- FCM Tokens ----
+    // Users can only manage their own FCM tokens
+    match /users/{userId}/tokens/{tokenId} {
+      allow read, write: if signedIn() && uid() == userId;
+    }
+  }
+}

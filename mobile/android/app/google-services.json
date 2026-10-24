@@ -1,0 +1,34 @@
+{
+  "project_info": {
+    "project_number": "879352709456",
+    "project_id": "califnco-6c194",
+    "storage_bucket": "califnco-6c194.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:879352709456:android:625776c13e991533e72c55",
+        "android_client_info": {
+          "package_name": "com.califnco.water.califnco_water"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "879352709456-compute@developer.gserviceaccount.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJ3MNZ6kF__mzV2uBq-OXCndFSxWgDOro"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

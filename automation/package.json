@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@gradio/client": "^2.7.1",
+    "@huggingface/inference": "^4.13.32"
+  }
+}
